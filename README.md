@@ -16,7 +16,7 @@ cd $HOME/0gmonitor && screen -S 0gmonitor
 run script
 
 ```
-chmod +x 0gmonitor.sh && ./0gmonitor
+chmod +x 0gmonitor.sh && ./0gmonitor.sh
 ```
 
 
