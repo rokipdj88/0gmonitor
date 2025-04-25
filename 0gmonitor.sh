@@ -19,7 +19,7 @@ echo -e '$$ | \$$ |   $$ |        $$$$$$$$\ $$  /\$$\ $$ |  $$ |\$$$$$$$ |\$$$$$
 echo -e '\__|  \__|   \__|        \________|\__/  \__|\__|  \__| \_______| \______/ \_______/    \____/ '
 echo -e '\e[0m'
 echo -e "Join our Telegram channel: https://t.me/NTExhaust"
-sleep 5
+sleep 3
 
 # --- Konfigurasi ---
 STORAGE_RPC_PORT="5678"
@@ -28,9 +28,34 @@ PARENT_RPC="https://evmrpc-testnet.0g.ai"
 CHECK_INTERVAL=300  # 5 menit
 THRESHOLD=300       # Selisih maksimum
 
+# --- Opsional: Kirim ke Telegram jika ingin ---
+BOT_TOKEN=""     # ← isi jika ingin kirim ke Telegram
+CHAT_ID=""       # ← isi jika ingin kirim ke Telegram
+
 # --- Fungsi konversi hex ke desimal ---
 hex_to_dec() {
     printf "%d" "$((16#${1#0x}))"
+}
+
+# --- Fungsi kirim pesan Telegram ---
+send_telegram_log() {
+    local status="$1"
+    local msg=$(cat <<EOF
+📢 *NT-Exhaust Report*
+🧠 *0G Storage Node*
+
+📦 *Storage:* \`$STORAGE_HEIGHT\`
+🌐 *Parent:* \`$PARENT_HEIGHT\`
+🔁 *Selisih:* \`$DIFF\`
+$status
+EOF
+)
+    if [[ -n "$BOT_TOKEN" && -n "$CHAT_ID" ]]; then
+        curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            --data-urlencode "text=$msg" \
+            -d parse_mode="Markdown" > /dev/null
+    fi
 }
 
 # --- Loop utama ---
@@ -59,9 +84,11 @@ while true; do
 
     if (( DIFF > THRESHOLD )); then
         echo -e "[$TIMESTAMP] ${RED}⚠️ STORAGE_NODE TERTINGGAL! Restarting zgs...${NC}"
+        send_telegram_log "⚠️ *Status:* _STORAGE_NODE TERTINGGAL — Restarting zgs..._"
         systemctl restart zgs
     else
         echo -e "[$TIMESTAMP] ${GREEN}✅ STORAGE_NODE OK${NC}"
+        send_telegram_log "✅ *Status:* STORAGE_NODE OK"
     fi
 
     sleep $CHECK_INTERVAL
