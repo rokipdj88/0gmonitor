@@ -19,6 +19,16 @@ run script
 chmod +x 0gmonitor.sh && ./0gmonitor.sh
 ```
 
+for telegram report
+
+change to your token bot & chat id
+
+```
+export BOT_TOKEN="your-token-bot:"
+export CHAT_ID="your-chatid"
+bash 0gmonitor.sh
+```
+
 
 
 
