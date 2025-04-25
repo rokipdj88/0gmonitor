@@ -25,23 +25,24 @@ sleep 3
 STORAGE_RPC_PORT="5678"
 STORAGE_RPC="http://localhost:$STORAGE_RPC_PORT"
 PARENT_RPC="https://evmrpc-testnet.0g.ai"
-CHECK_INTERVAL=300  # 5 menit
-THRESHOLD=300       # Selisih maksimum
+CHECK_INTERVAL=300
+THRESHOLD=300
 
-# --- Opsional: Kirim ke Telegram jika ingin ---
-BOT_TOKEN=""     # ← isi jika ingin kirim ke Telegram
-CHAT_ID=""       # ← isi jika ingin kirim ke Telegram
+# --- Opsional: Token & Chat ID Telegram (export dari env atau hardcode di sini)
+BOT_TOKEN="${BOT_TOKEN:-}"     # export BOT_TOKEN="..." jika ingin aktif
+CHAT_ID="${CHAT_ID:-}"         # export CHAT_ID="..." jika ingin aktif
 
-# --- Fungsi konversi hex ke desimal ---
-hex_to_dec() {
-    printf "%d" "$((16#${1#0x}))"
+# --- Escape MarkdownV2 ---
+escape_markdown_v2() {
+    echo "$1" | sed -E 's/([][(){}.!*#+-=|~`>_<])|\\/\\\1/g'
 }
 
-# --- Fungsi kirim pesan Telegram ---
+# --- Kirim pesan ke Telegram ---
 send_telegram_log() {
-    local status="$1"
+    local status_raw="$1"
+    local status=$(escape_markdown_v2 "$status_raw")
     local msg=$(cat <<EOF
-📢 *NT-Exhaust Report*
+📢 *NT\\-Exhaust Report*
 🧠 *0G Storage Node*
 
 📦 *Storage:* \`$STORAGE_HEIGHT\`
@@ -51,14 +52,23 @@ $status
 EOF
 )
     if [[ -n "$BOT_TOKEN" && -n "$CHAT_ID" ]]; then
+        echo -e "${YELLOW}[DEBUG] Mengirim pesan ke Telegram...${NC}"
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             --data-urlencode "text=$msg" \
-            -d parse_mode="Markdown" > /dev/null
+            -d parse_mode="MarkdownV2" \
+            -w "\n[HTTP STATUS: %{http_code}]\n"
+    else
+        echo -e "${YELLOW}[INFO] BOT_TOKEN atau CHAT_ID belum diatur. Lewatkan kirim pesan.${NC}"
     fi
 }
 
-# --- Loop utama ---
+# --- Fungsi hex ke desimal ---
+hex_to_dec() {
+    printf "%d" "$((16#${1#0x}))"
+}
+
+# --- Loop monitoring ---
 while true; do
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     echo -e "[$TIMESTAMP] ${CYAN}⏳ Mengecek block height...${NC}"
@@ -84,11 +94,11 @@ while true; do
 
     if (( DIFF > THRESHOLD )); then
         echo -e "[$TIMESTAMP] ${RED}⚠️ STORAGE_NODE TERTINGGAL! Restarting zgs...${NC}"
-        send_telegram_log "⚠️ *Status:* _STORAGE_NODE TERTINGGAL — Restarting zgs..._"
+        send_telegram_log "⚠️ Status: STORAGE_NODE TERTINGGAL — Restarting zgs..."
         systemctl restart zgs
     else
         echo -e "[$TIMESTAMP] ${GREEN}✅ STORAGE_NODE OK${NC}"
-        send_telegram_log "✅ *Status:* STORAGE_NODE OK"
+        send_telegram_log "✅ Status: STORAGE_NODE OK"
     fi
 
     sleep $CHECK_INTERVAL
