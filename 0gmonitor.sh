@@ -27,6 +27,7 @@ STORAGE_RPC="http://localhost:$STORAGE_RPC_PORT"
 PARENT_RPC="https://evmrpc-testnet.0g.ai"
 CHECK_INTERVAL=300
 THRESHOLD=300
+WALLET_ADDRESS="0xADDRESS"  # Ganti dengan wallet kamu
 
 # --- Opsional: Token & Chat ID Telegram (export dari env atau hardcode di sini)
 BOT_TOKEN="${BOT_TOKEN:-}"     # export BOT_TOKEN="..." jika ingin aktif
@@ -41,6 +42,7 @@ escape_markdown_v2() {
 send_telegram_log() {
     local status_raw="$1"
     local status=$(escape_markdown_v2 "$status_raw")
+    local A0GI_BALANCE=$(get_a0gi_balance)
     local msg=$(cat <<EOF
 📢 *NT\\-Exhaust Report*
 🧠 *0G Storage Node*
@@ -48,6 +50,7 @@ send_telegram_log() {
 📦 *Storage:* \`$STORAGE_HEIGHT\`
 🌐 *Parent:* \`$PARENT_HEIGHT\`
 🔁 *Selisih:* \`$DIFF\`
+💰 *A0GI Balance:* \`$A0GI_BALANCE A0GI\`
 $status
 EOF
 )
@@ -66,6 +69,20 @@ EOF
 # --- Fungsi hex ke desimal ---
 hex_to_dec() {
     printf "%d" "$((16#${1#0x}))"
+}
+
+# --- Fungsi ambil saldo A0GI dari RPC ---
+get_a0gi_balance() {
+    local BAL_HEX=$(curl -s -X POST "$PARENT_RPC" \
+        -H "Content-Type: application/json" \
+        -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\",\"params\":[\"$WALLET_ADDRESS\", \"latest\"],\"id\":1}" | jq -r '.result')
+
+    if [[ "$BAL_HEX" == "null" || -z "$BAL_HEX" ]]; then
+        echo "0"
+    else
+        local BAL_DEC=$(printf "%d" "$((16#${BAL_HEX#0x}))")
+        echo "scale=6; $BAL_DEC / 1000000000000000000" | bc
+    fi
 }
 
 # --- Loop monitoring ---
@@ -91,6 +108,9 @@ while true; do
 
     DIFF=$((PARENT_HEIGHT - STORAGE_HEIGHT))
     echo -e "[$TIMESTAMP] ${CYAN}📦 Storage:${NC} $STORAGE_HEIGHT | ${CYAN}🌐 Parent:${NC} $PARENT_HEIGHT | ${YELLOW}🔁 Selisih:${NC} $DIFF"
+
+    A0GI_BAL=$(get_a0gi_balance)
+    echo -e "[$TIMESTAMP] ${CYAN}💰 Saldo A0GI:${NC} $A0GI_BAL A0GI"
 
     if (( DIFF > THRESHOLD )); then
         echo -e "[$TIMESTAMP] ${RED}⚠️ STORAGE_NODE TERTINGGAL! Restarting zgs...${NC}"
