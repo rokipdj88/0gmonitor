@@ -30,7 +30,7 @@ STORAGE_RPC_PORT="5678"
 STORAGE_RPC="http://localhost:$STORAGE_RPC_PORT"
 PARENT_RPC="https://evmrpc-testnet.0g.ai"
 CHECK_INTERVAL=300
-WALLET_ADDRESS="ADDRESS"
+WALLET_ADDRESS="YOUR-ADDRESS"
 
 # --- Token & Chat ID Telegram ---
 BOT_TOKEN="${BOT_TOKEN:-}"
