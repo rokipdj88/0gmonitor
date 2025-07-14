@@ -8,6 +8,10 @@ clone
 git clone https://github.com/rokipdj88/0gmonitor.git
 cd 0gmonitor
 ```
+change your WALLET_ADDRES="YOUR-ADDRESS"
+```
+nano 0gmonitor.sh
+```
 
 copy to system
 ```
