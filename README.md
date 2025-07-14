@@ -3,31 +3,67 @@
 
 copy and paste into your terminal :
 
-clone file
+clone
 ```bash
 git clone https://github.com/rokipdj88/0gmonitor.git
+cd 0gmonitor
 ```
 
-make screen & go to directory
+copy to system
 ```
-cd $HOME/0gmonitor && screen -S 0gmonitor
-```
-
-run script
-
-```
-chmod +x 0gmonitor.sh && ./0gmonitor.sh
+sudo cp 0gmonitor.sh /usr/local/bin/monitor_zgs.sh
+sudo chmod +x /usr/local/bin/monitor_zgs.sh
 ```
 
-for telegram report
+create service systemd
+```
+sudo nano /etc/systemd/system/monitor-zgs.service
+
+```
+
+paste
 
 change to your token bot & chat id
 
 ```
-export BOT_TOKEN="your-token-bot:"
-export CHAT_ID="your-chatid"
-bash 0gmonitor.sh
+[Unit]
+Description=Monitor 0G Storage Node Service
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/monitor_zgs.sh
+Restart=always
+User=root
+Environment=BOT_TOKEN=isi_token_telegram
+Environment=CHAT_ID=isi_chat_id
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
 ```
+
+run & activate service
+```
+sudo systemctl daemon-reload
+sudo systemctl enable monitor-zgs
+sudo systemctl start monitor-zgs
+
+```
+Chcek log realtime
+```
+journalctl -fu monitor-zgs
+```
+uninstall & delete service
+```
+sudo systemctl stop monitor-zgs
+sudo systemctl disable monitor-zgs
+sudo rm /etc/systemd/system/monitor-zgs.service
+sudo rm /usr/local/bin/monitor_zgs.sh
+sudo systemctl daemon-reexec
+```
+
 
 
 
