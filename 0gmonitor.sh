@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# --- Set lingkungan UTF-8 ---
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
 # --- Warna ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -26,39 +30,61 @@ STORAGE_RPC_PORT="5678"
 STORAGE_RPC="http://localhost:$STORAGE_RPC_PORT"
 PARENT_RPC="https://evmrpc-testnet.0g.ai"
 CHECK_INTERVAL=300
-THRESHOLD=300
-WALLET_ADDRESS="0xADDRESS"  # Ganti dengan wallet kamu
+WALLET_ADDRESS="ADDRESS"
 
-# --- Opsional: Token & Chat ID Telegram (export dari env atau hardcode di sini)
-BOT_TOKEN="${BOT_TOKEN:-}"     # export BOT_TOKEN="..." jika ingin aktif
-CHAT_ID="${CHAT_ID:-}"         # export CHAT_ID="..." jika ingin aktif
+# --- Token & Chat ID Telegram ---
+BOT_TOKEN="${BOT_TOKEN:-}"
+CHAT_ID="${CHAT_ID:-}"
 
 # --- Escape MarkdownV2 ---
 escape_markdown_v2() {
-    echo "$1" | sed -E 's/([][(){}.!*#+-=|~`>_<])|\\/\\\1/g'
+    echo "$1" | sed -e 's/\\/\\\\/g' \
+                   -e 's/\./\\./g' \
+                   -e 's/-/\\-/g' \
+                   -e 's/(/\\(/g' \
+                   -e 's/)/\\)/g' \
+                   -e 's/\[/\\[/g' \
+                   -e 's/\]/\\]/g' \
+                   -e 's/{/\\{/g' \
+                   -e 's/}/\\}/g' \
+                   -e 's/=/\\=/g' \
+                   -e 's/!/\\!/g' \
+                   -e 's/\*/\\*/g' \
+                   -e 's/_/\\_/g' \
+                   -e 's/`/\\`/g' \
+                   -e 's/>/\\>/g' \
+                   -e 's/#/\\#/g' \
+                   -e 's/\+/\\+/g' \
+                   -e 's/|/\\|/g' \
+                   -e 's/~\\/\\~/g'
 }
+
 
 # --- Kirim pesan ke Telegram ---
 send_telegram_log() {
     local status_raw="$1"
-    local status=$(escape_markdown_v2 "$status_raw")
-    local A0GI_BALANCE=$(get_a0gi_balance)
-    local msg=$(cat <<EOF
-📢 *NT\\-Exhaust Report*
-🧠 *0G Storage Node*
+    local raw_msg=$(cat <<EOF
+📢 *NT-Exhaust Report*
+🧠 0G Storage Node
 
-📦 *Storage:* \`$STORAGE_HEIGHT\`
-🌐 *Parent:* \`$PARENT_HEIGHT\`
-🔁 *Selisih:* \`$DIFF\`
-💰 *A0GI Balance:* \`$A0GI_BALANCE A0GI\`
-$status
+📦 Storage: \`$STORAGE_HEIGHT\`
+🌐 Parent: \`$PARENT_HEIGHT\`
+🔁 Selisih: \`$DIFF\`
+💰 A0GI Balance: \`$A0GI_BALANCE A0GI\`
+$status_raw
 EOF
 )
+    # Escape semua karakter untuk MarkdownV2
+    local msg=$(escape_markdown_v2 "$raw_msg")
+
+    # Filter karakter non-UTF-8 agar tidak error ke Telegram
+    local msg_cleaned=$(echo "$msg" | iconv -f utf-8 -t utf-8 -c)
+
     if [[ -n "$BOT_TOKEN" && -n "$CHAT_ID" ]]; then
         echo -e "${YELLOW}[DEBUG] Mengirim pesan ke Telegram...${NC}"
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            --data-urlencode "text=$msg" \
+            --data-urlencode "chat_id=$CHAT_ID" \
+            --data-urlencode "text=$msg_cleaned" \
             -d parse_mode="MarkdownV2" \
             -w "\n[HTTP STATUS: %{http_code}]\n"
     else
@@ -66,12 +92,13 @@ EOF
     fi
 }
 
-# --- Fungsi hex ke desimal ---
+
+# --- Hex ke Desimal ---
 hex_to_dec() {
     printf "%d" "$((16#${1#0x}))"
 }
 
-# --- Fungsi ambil saldo A0GI dari RPC ---
+# --- Ambil saldo A0GI ---
 get_a0gi_balance() {
     local BAL_HEX=$(curl -s -X POST "$PARENT_RPC" \
         -H "Content-Type: application/json" \
@@ -85,7 +112,9 @@ get_a0gi_balance() {
     fi
 }
 
-# --- Loop monitoring ---
+# --- Monitoring Loop ---
+LAST_DIFF=0
+
 while true; do
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     echo -e "[$TIMESTAMP] ${CYAN}⏳ Mengecek block height...${NC}"
@@ -109,17 +138,23 @@ while true; do
     DIFF=$((PARENT_HEIGHT - STORAGE_HEIGHT))
     echo -e "[$TIMESTAMP] ${CYAN}📦 Storage:${NC} $STORAGE_HEIGHT | ${CYAN}🌐 Parent:${NC} $PARENT_HEIGHT | ${YELLOW}🔁 Selisih:${NC} $DIFF"
 
-    A0GI_BAL=$(get_a0gi_balance)
-    echo -e "[$TIMESTAMP] ${CYAN}💰 Saldo A0GI:${NC} $A0GI_BAL A0GI"
+    A0GI_BALANCE=$(get_a0gi_balance)
+    echo -e "[$TIMESTAMP] ${CYAN}💰 Saldo A0GI:${NC} $A0GI_BALANCE A0GI"
 
-    if (( DIFF > THRESHOLD )); then
-        echo -e "[$TIMESTAMP] ${RED}⚠️ STORAGE_NODE TERTINGGAL! Restarting zgs...${NC}"
-        send_telegram_log "⚠️ Status: STORAGE_NODE TERTINGGAL — Restarting zgs..."
-        systemctl restart zgs
+    if (( DIFF > 500 )); then
+        if (( DIFF >= LAST_DIFF )); then
+            echo -e "[$TIMESTAMP] ${RED}⚠️ STORAGE_NODE Semakin tertinggal ($DIFF ≥ $LAST_DIFF) — Restarting zgs...${NC}"
+            send_telegram_log "⚠️ Status: STORAGE_NODE Semakin tertinggal ($DIFF ≥ $LAST_DIFF) — Restarting zgs..."
+            systemctl restart zgs
+        else
+            echo -e "[$TIMESTAMP] ${YELLOW}⚠️ Tertinggal tetapi mulai mengejar ($DIFF < $LAST_DIFF) — Tidak restart.${NC}"
+            send_telegram_log "🟡 Status: STORAGE_NODE Tertinggal tapi mulai mengejar ($DIFF < $LAST_DIFF) — Tidak restart"
+        fi
     else
         echo -e "[$TIMESTAMP] ${GREEN}✅ STORAGE_NODE OK${NC}"
         send_telegram_log "✅ Status: STORAGE_NODE OK"
     fi
 
+    LAST_DIFF=$DIFF
     sleep $CHECK_INTERVAL
 done
